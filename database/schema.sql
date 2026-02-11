@@ -1,61 +1,77 @@
--- Schema for Hornevibes Database
-
--- Define Tables
 CREATE TABLE users (
-    id SERIAL PRIMARY KEY,
-    username VARCHAR(50) NOT NULL UNIQUE,
-    email VARCHAR(100) NOT NULL UNIQUE,
-    password VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    user_id SERIAL PRIMARY KEY,
+    username VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    role ENUM('admin', 'user') NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE posts (
-    id SERIAL PRIMARY KEY,
-    user_id INT REFERENCES users(id),
-    content TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+CREATE TABLE songs (
+    song_id SERIAL PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    artist_id INT NOT NULL,
+    album_id INT,
+    genre_id INT,
+    length INT,
+    release_date DATE,
+    FOREIGN KEY (artist_id) REFERENCES artists(artist_id),
+    FOREIGN KEY (album_id) REFERENCES albums(album_id),
+    FOREIGN KEY (genre_id) REFERENCES genres(genre_id)
 );
 
-CREATE TABLE comments (
-    id SERIAL PRIMARY KEY,
-    post_id INT REFERENCES posts(id),
-    user_id INT REFERENCES users(id),
-    content TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+CREATE TABLE artists (
+    artist_id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL
 );
 
--- Define Indexes
-CREATE INDEX idx_users_username ON users(username);
-CREATE INDEX idx_users_email ON users(email);
-CREATE INDEX idx_posts_user_id ON posts(user_id);
-CREATE INDEX idx_comments_post_id ON comments(post_id);
+CREATE TABLE albums (
+    album_id SERIAL PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    artist_id INT NOT NULL,
+    release_date DATE,
+    FOREIGN KEY (artist_id) REFERENCES artists(artist_id)
+);
 
--- Define Policies
--- Users should be able to select their own posts
-CREATE POLICY select_own_posts ON posts
-FOR SELECT
-TO users
-USING (user_id = auth.uid());
+CREATE TABLE genres (
+    genre_id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL
+);
 
--- Users should be able to insert their own posts
-CREATE POLICY insert_own_posts ON posts
-FOR INSERT
-TO users
-WITH CHECK (user_id = auth.uid());
+CREATE TABLE playlists (
+    playlist_id SERIAL PRIMARY KEY,
+    user_id INT NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id)
+);
 
--- Users should be able to select their own comments
-CREATE POLICY select_own_comments ON comments
-FOR SELECT
-TO users
-USING (user_id = auth.uid());
+CREATE TABLE favorites (
+    user_id INT NOT NULL,
+    song_id INT NOT NULL,
+    PRIMARY KEY (user_id, song_id),
+    FOREIGN KEY (user_id) REFERENCES users(user_id),
+    FOREIGN KEY (song_id) REFERENCES songs(song_id)
+);
 
--- Users should be able to insert their own comments
-CREATE POLICY insert_own_comments ON comments
-FOR INSERT
-TO users
-WITH CHECK (user_id = auth.uid());
+CREATE TABLE listening_history (
+    user_id INT NOT NULL,
+    song_id INT NOT NULL,
+    listened_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, song_id, listened_at),
+    FOREIGN KEY (user_id) REFERENCES users(user_id),
+    FOREIGN KEY (song_id) REFERENCES songs(song_id)
+);
 
--- End of SQL script
+-- Optimized Indexing
+CREATE INDEX idx_user_id ON favorites(user_id);
+CREATE INDEX idx_song_id ON favorites(song_id);
+
+-- RLS Policies
+CREATE POLICY user_access ON songs
+    FOR SELECT
+    USING (user_id = current_setting('app.current_user_id')::INT);
+
+CREATE POLICY admin_access ON songs
+    FOR ALL
+    USING (current_setting('app.current_user_role') = 'admin');
